@@ -81,6 +81,34 @@ class Item(object):
                 else:
                     logger.debug("Removed temp file '%s'" % temp_file)
 
+    def is_similar_for_ui(self, other):
+        """
+        Use to compare certain properties of two `Item` to consider them valid to be modify at the same time in the ui
+
+        :param other_item: Other `Item` object use as a comparison with the current object
+
+        :return: True if the two item are similar, False otherwise
+        """
+
+        # Two item with different type cannot be shown together in the detail pane
+        if self._get_type() != other._get_type():
+            return False
+
+        # If the type is the same, the display type should also be. Atm to prevent problem, we will refuse if
+        # the display type is not the same
+        if self._get_display_type() != other._get_display_type():
+            return False
+
+        # We need to have a similar context to be able to show the different item at the same time
+        if self._get_context() != other._get_context():
+            return False
+
+        # Finally, right now we want to make sure that the items have the same root parent
+        if self.parent != other.parent:
+            return False
+
+        return True
+
     @classmethod
     def create_invisible_root_item(cls):
         """

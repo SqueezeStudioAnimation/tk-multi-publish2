@@ -245,6 +245,11 @@ class AppDialog(QtGui.QWidget):
             self._current_item = None
             publish_tasks = _TaskSelection([item.get_publish_instance() for item in items])
             self._update_task_details_ui(publish_tasks)
+        elif self._is_item_selection_homogeneous(items):
+            self._current_item = None
+            self._update_task_details_ui()
+            publish_items = _ItemSelection(items)
+            self._create_multiple_item_details(publish_items)
         elif len(items) != 1:
             # Otherwise we can't show items from a multi-selection, so inform the user.
             self._current_item = None
@@ -289,6 +294,45 @@ class AppDialog(QtGui.QWidget):
 
             # There's a task that's not of the same type as the others, we're done!
             if not first_task.is_same_task_type(publish_instance):
+                return False
+
+        return True
+
+    def _is_item_selection_homogeneous(self, items):
+        """
+        Indicates if a selection is made up only of items with similar properties
+
+        :param items: List of tree node items.
+
+        :returns: ``True`` is the selection only contains similar items, ``False`` otherwise.
+        """
+        # If the list is empty or contain only one item, use the old way to show items and prevent any problem at the
+        # moment
+        if len(items) <= 1:
+            return False
+
+        # Take the first item in the list. It will be use as the comparison with all the other items
+        first_task = items[0].get_publish_instance()
+
+        # The first element is not an item, so this is not a item list only
+        if not isinstance(first_task, Item):
+            return False
+
+        # TODO - Managing item with parent different than the root
+        # If the parent is not the root, return false also. We don't want to interfer with the multiple task selection
+        if not self.parent and not self.parent.is_root():
+            return False
+
+        # Skip the first item
+        for item in items:
+
+            publish_instance = item.get_publish_instance()
+            # User has mixed different types of publish instances, it's not just a item list.
+            if not isinstance(publish_instance, Item):
+                return False
+
+            # There's a task that's not of the same type as the others, we're done!
+            if not first_task.is_similar_for_ui(publish_instance):
                 return False
 
         return True
@@ -525,6 +569,73 @@ class AppDialog(QtGui.QWidget):
         #    [(p, item.properties[p]) for p in item.properties]
         #)
 
+    def _create_multiple_item_details(self, item_selection):
+        """
+        Render the detail pane for multiple items.
+
+        This function consider that the different items have similar properties
+
+        :param new_task_selection: A :class:`ItemSelection` containing the current UI selection.
+        """
+        self._current_item = item_selection
+        self.ui.details_stack.setCurrentIndex(self.ITEM_DETAILS)
+        self.ui.item_icon.setPixmap(item_selection.icon)
+
+        self.ui.item_name.setText(item_selection.name)
+        self.ui.item_type.setText(item_selection.display_type)
+
+        # check the state of screenshot
+        if item_selection.thumbnail_enabled:
+            # display and make thumbnail editable
+            self.ui.item_thumbnail_label.show()
+            self.ui.item_thumbnail.show()
+            self.ui.item_thumbnail.setEnabled(True)
+
+        elif not item_selection.thumbnail_enabled and item_selection.thumbnail:
+            # show thumbnail but disabled
+            self.ui.item_thumbnail_label.show()
+            self.ui.item_thumbnail.show()
+            self.ui.item_thumbnail.setEnabled(False)
+
+        else:
+            # hide thumbnail
+            self.ui.item_thumbnail_label.hide()
+            self.ui.item_thumbnail.hide()
+
+        self.ui.item_description_label.setText("Description")
+        self.ui.item_comments.setPlainText(item_selection.description)
+        self.ui.item_thumbnail.set_thumbnail(item_selection.thumbnail)
+
+        # TODO - Manage multiple item parent
+        if item_selection.parent.is_root():
+            self.ui.context_widget.show()
+            self.ui.context_widget.context_label.setText(
+                "Task and Entity Link to apply to the selected item:"
+            )
+            self.ui.context_widget.set_context(item_selection.context)
+        else:
+            self.ui.context_widget.hide()
+
+        # create summary
+        self.ui.item_summary_label.show()
+        summary = item_selection.create_summary()
+        # generate a summary
+
+        if len(summary) == 0:
+            summary_text = "Nothing will published."
+
+        else:
+            summary_text = "<p>The following items will be published:</p>"
+            summary_text += "".join(["<p>%s</p>" % line for line in summary])
+
+        self.ui.item_summary.setText(summary_text)
+
+        # skip settings for now
+        ## render settings
+        #self.ui.item_settings.set_static_data(
+        #    [(p, item.properties[p]) for p in item.properties]
+        #)
+
     def _create_master_summary_details(self):
         """
         Render the master summary representation
@@ -618,6 +729,7 @@ class AppDialog(QtGui.QWidget):
         """
         When someone drops stuff into the publish.
         """
+
         # add files and rebuild tree
         self._progress_handler.set_phase(self._progress_handler.PHASE_LOAD)
         self._progress_handler.push("Processing dropped files")
@@ -633,7 +745,13 @@ class AppDialog(QtGui.QWidget):
         try:
             self.ui.main_stack.setCurrentIndex(self.PUBLISH_SCREEN)
             self._overlay.show_loading()
-            num_items_created = self._plugin_manager.add_external_files(str_files)
+            num_items_created, skipped_path = self._plugin_manager.add_external_files(str_files)
+
+            # Always print when an item have been skipped
+            if skipped_path:
+                for path in skipped_path:
+                    self._progress_handler.logger.info("Skipped because path already been processed %s " % path)
+
             num_errors = self._progress_handler.pop()
 
             if num_errors == 0 and num_items_created == 0:
@@ -1069,6 +1187,193 @@ class _TaskSelection(object):
         """
         if self._items:
             self._items[0].plugin.run_set_ui_settings(widget, settings)
+
+    def __iter__(self):
+        """
+        Allows to iterate over items in the selection.
+        """
+        return iter(self._items)
+
+    def __eq__(self, other):
+        """
+        Tests two selections for equality.
+        """
+        return self._items == other._items
+
+    def __nonzero__(self):
+        """
+        :returns: ``True`` is the selection is not empty, ``False`` otherwise.
+        """
+        return bool(self._items)
+
+class _ItemSelection(object):
+    """
+    Similar to _TaskSelection, it allows to manipulate a item selection as if it was a single object.
+    It will hold a list of tree_item in which we will extract the different items properties.
+    It also removes the tedium of testing for an empty array and indexing [0] when doing comparisons and also give
+    us the possibility to be flexible with the ui accessibility.
+
+    This class assumes every item are instance of ``TreeItem`` and that prior validation on
+    items similarity have been done
+
+    :param items: List of item for in the selection. Defaults to an empty list.
+    """
+    def __init__(self, items=None):
+        self._items = [item.get_publish_instance() for item in items] or []
+        self._tree_items = items or []
+
+    @property
+    def name(self):
+        """
+        Return the description of the first item.
+
+        :returns: The description to show.
+        """
+
+        # TODO - See if we want to show something better than this..
+
+        return "Multiple Item Selected"
+
+    def _get_description(self):
+        """
+        Return the description of the first item.
+
+        :returns: The description to show.
+        """
+        if self._items:
+            return self._items[0]._get_description()
+        else:
+            return None
+
+    def _set_description(self, text):
+        """
+        Set the description on all the items in the list
+
+        :param text: The new description to set
+        """
+
+        for item in self._items:
+            item._set_description(text)
+
+    description = property(_get_description, _set_description)
+
+    def _get_context(self):
+        """
+        Return the context of the first item. All item must have the same context
+
+        :returns: The context to show.
+        """
+        if self._items:
+            return self._items[0]._get_context()
+        else:
+            return None
+
+    def _set_context(self, new_context):
+        """
+        Set the context on all the items in the list
+
+        :param text: The new description to set
+        """
+
+        for item in self._items:
+            item._set_context(new_context)
+
+    context = property(_get_context, _set_context)
+
+    def _get_thumbnail(self):
+        """
+        Return the first valid thumbnails found in the item list
+
+        :returns: The pixmap to show.
+        """
+        if self._items:
+            for item in self._items:
+                thumb = item._get_thumbnail()
+                if thumb:
+                    return thumb
+            return None
+        else:
+            return None
+
+    def _set_thumbnail(self, pixmap):
+        """
+        Set the description on all the items in the list
+
+        :param pixmap: The new image to set on the item
+        """
+
+        for item in self._items:
+            item._set_thumbnail(pixmap)
+
+    # TODO - Manage multiple thumbnails
+    thumbnail = property(_get_thumbnail, _set_thumbnail)
+
+    @property
+    def icon(self):
+        """
+        Return the icon if the first tree item. All items should be similar
+
+        :returns: The icon to show.
+        """
+        if self._items:
+            return self._tree_items[0].icon
+        else:
+            return None
+
+    @property
+    def display_type(self):
+        """
+        Return the display type of the first tree item. All items should be similar
+
+        :returns: The display type as a string.
+        """
+        if self._items:
+            return self._items[0]._get_display_type()
+        else:
+            return None
+
+    @property
+    def thumbnail_enabled(self):
+        """
+        Check if all the items have the thumbnail enabled. If one of them is not, return false
+
+        :returns: Return True or False depending of the property value of all items
+        """
+        if self._items:
+            for item in self._items:
+                if not item._get_thumbnail_enabled():
+                    return False
+        else:
+            return None
+
+        return True
+
+    @property
+    def parent(self):
+        """
+        Return the parent of all items. Should always be the same and also be the root at the moment
+
+        :returns: Return the parent of all items
+        """
+        if self._items:
+            return self._items[0].parent
+        else:
+            return None
+
+    def create_summary(self):
+        """
+        Build a summary of all the selected item summary in the list
+
+        :return: Return a summary of all actions associated to all items
+        """
+        # TODO - Eventually do something when the summary if too big
+
+        # Create summary for all the items and add them all together to return only one summary
+        all_summary = []
+        for item in self._tree_items:
+            all_summary.extend(item.create_summary())
+
+        return all_summary
 
     def __iter__(self):
         """

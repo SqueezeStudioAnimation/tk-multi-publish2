@@ -118,12 +118,14 @@ class PluginManager(object):
         """
         # make sure we don't drop the same file twice
         paths_to_process = []
+        skipped_path = []
         for path in paths:
             if path not in self._dropped_paths:
                 logger.debug("Adding external file '%s'" % path)
                 paths_to_process.append(path)
             else:
                 logger.warning("Skipping duplicate path '%s'" % path)
+                skipped_path.append(path)
         self._dropped_paths.extend(paths_to_process)
 
         # now run the collection for all the new items
@@ -132,7 +134,7 @@ class PluginManager(object):
             collect_current_scene=False,
             paths=paths_to_process
         )
-        return len(items_created)
+        return len(items_created), skipped_path
 
     def _collect(self, collect_current_scene, paths=None):
         """
