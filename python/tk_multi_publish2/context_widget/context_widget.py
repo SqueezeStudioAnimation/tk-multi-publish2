@@ -105,6 +105,9 @@ class ContextWidget(QtGui.QWidget):
             "Recent": []
         }
 
+        # List of widget filtered by the even filter we want to not process
+        self._disabled_event_widget = []
+
         # set up the UI
         self.ui = Ui_ContextWidget()
         self.ui.setupUi(self)
@@ -113,6 +116,9 @@ class ContextWidget(QtGui.QWidget):
         """
         Filter out and handle some key/click events on the search widgets.
         """
+
+        if widget in self._disabled_event_widget:
+            return False
 
         key_event = QtCore.QEvent.KeyPress
         click_event = QtCore.QEvent.MouseButtonRelease
@@ -306,6 +312,42 @@ class ContextWidget(QtGui.QWidget):
 
         # get recent contexts from user settings
         self._get_recent_contexts()
+
+    def toggle_search_event(self, enable_task=True, enable_link=True):
+        """
+        Disable/Enable task or link section of the context UI
+
+        :param enabled: Boolean to tell if we want to disable or enable
+        """
+
+        # Task section
+        if enable_task:
+            if self.ui.task_display in self._disabled_event_widget:
+                    self._disabled_event_widget.remove(self.ui.task_display)
+            if self.ui.task_search in self._disabled_event_widget:
+                    self._disabled_event_widget.remove(self.ui.task_search)
+            self.ui.task_search_btn.setEnabled(True)
+        else:
+            if self.ui.task_display not in self._disabled_event_widget:
+                    self._disabled_event_widget.append(self.ui.task_display)
+            if self.ui.task_search not in self._disabled_event_widget:
+                    self._disabled_event_widget.append(self.ui.task_search)
+            self.ui.task_search_btn.setEnabled(False)
+            self.ui.task_menu_btn.setEnabled(False)
+
+        # Link section
+        if enable_task:
+            if self.ui.link_display in self._disabled_event_widget:
+                    self._disabled_event_widget.remove(self.ui.link_display)
+            if self.ui.link_search in self._disabled_event_widget:
+                    self._disabled_event_widget.remove(self.ui.link_search)
+            self.ui.link_search_btn.setEnabled(True)
+        else:
+            if self.ui.link_display not in self._disabled_event_widget:
+                    self._disabled_event_widget.append(self.ui.link_display)
+            if self.ui.link_search not in self._disabled_event_widget:
+                    self._disabled_event_widget.append(self.ui.link_search)
+            self.ui.link_search_btn.setEnabled(False)
 
     @property
     def context_label(self):

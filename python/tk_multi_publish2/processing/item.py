@@ -55,6 +55,10 @@ class Item(object):
         self._enabled = True
         self._expanded = True
         self._thumbnail_enabled = True
+        # Use in case where the entity wanted doesn't exist
+        self._task_override = None
+        self._link_override = None
+        self._need_creation = False
 
     def __repr__(self):
         """
@@ -102,6 +106,12 @@ class Item(object):
         # We need to have a similar context to be able to show the different item at the same time
         if self._get_context() != other._get_context():
             return False
+        else:
+            # Check for the task and link override in case
+            if self.task_override != other.task_override:
+                return False
+            if self.link_override != other.link_override:
+                return False
 
         # Finally, right now we want to make sure that the items have the same root parent
         if self.parent != other.parent:
@@ -200,6 +210,42 @@ class Item(object):
         self._name = name
 
     name = property(_get_name, _set_name)
+
+    def _get_task_override(self):
+        """
+        The task override of the item as a string.
+        """
+        return self._task_override
+
+    def _set_task_override(self, task_override):
+        # setter for task override
+        self._task_override = task_override
+
+    task_override = property(_get_task_override, _set_task_override)
+
+    def _get_link_override(self):
+        """
+        The link override of the item as a string.
+        """
+        return self._link_override
+
+    def _set_link_override(self, link_override):
+        # setter for link override
+        self._link_override = link_override
+
+    link_override = property(_get_link_override, _set_link_override)
+
+    def _get_need_creation(self):
+        """
+        The need creation of the item as a bool.
+        """
+        return self._need_creation
+
+    def _set_need_creation(self, need_creation):
+        # setter for need creation
+        self._need_creation = need_creation
+
+    need_creation = property(_get_need_creation, _set_need_creation)
 
     def _get_type(self):
         """

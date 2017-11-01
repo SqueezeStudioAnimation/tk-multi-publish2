@@ -86,7 +86,8 @@ class PublishTreeWidget(QtGui.QTreeWidget):
         if level == 0:
             ui_item = TopLevelTreeNodeItem(item, tree_parent)
         else:
-            ui_item = TreeNodeItem(item, tree_parent)
+            if len(item.tasks) > 0 or len(item.children) > 0:
+                ui_item = TreeNodeItem(item, tree_parent, show_handle=True)
 
         # set expand state for item
         ui_item.setExpanded(item.expanded)

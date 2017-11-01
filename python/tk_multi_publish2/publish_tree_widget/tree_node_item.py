@@ -24,12 +24,14 @@ class TreeNodeItem(TreeNodeBase):
     Tree item for a publish item
     """
 
-    def __init__(self, item, parent):
+    def __init__(self, item, parent, show_handle=False):
         """
         :param item:
         :param parent: The parent QWidget for this control
+        :param show_handle: Do we want to show the drag handle
         """
         self._item = item
+        self._show_handle = show_handle
         super(TreeNodeItem, self).__init__(parent)
         self.setFlags(
             QtCore.Qt.ItemIsEnabled |
@@ -46,6 +48,10 @@ class TreeNodeItem(TreeNodeBase):
         widget.set_header("<b>%s</b><br>%s" % (self._item.name, self._item.display_type))
         widget.set_icon(self._item.icon)
         widget.set_checkbox_value(self.data(0, self.CHECKBOX_ROLE))
+
+        # show the drag handle for top level nodes
+        if self._show_handle:
+            widget.ui.drag_handle.show()
 
         return widget
 

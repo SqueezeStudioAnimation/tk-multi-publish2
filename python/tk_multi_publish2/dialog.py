@@ -249,7 +249,8 @@ class AppDialog(QtGui.QWidget):
             self._current_item = None
             self._update_task_details_ui()
             publish_items = _ItemSelection(items)
-            self._create_multiple_item_details(publish_items)
+            # See if we could remove the create multiple item
+            self._create_item_details(publish_items)
         elif len(items) != 1:
             # Otherwise we can't show items from a multi-selection, so inform the user.
             self._current_item = None
@@ -508,8 +509,14 @@ class AppDialog(QtGui.QWidget):
     def _create_item_details(self, tree_item):
         """
         Render details pane for a given item
+
+        :param tree_item: Tree item to process. Can be of type _ItemSelection in case we manage multiple item at
+        the same time
         """
-        item = tree_item.get_publish_instance()
+        if not isinstance(tree_item, _ItemSelection):
+            item = tree_item.get_publish_instance()
+        else:
+            item = tree_item
 
         self._current_item = item
         self.ui.details_stack.setCurrentIndex(self.ITEM_DETAILS)
@@ -540,85 +547,40 @@ class AppDialog(QtGui.QWidget):
         self.ui.item_comments.setPlainText(item.description)
         self.ui.item_thumbnail.set_thumbnail(item.thumbnail)
 
-        if item.parent.is_root():
+        # If one of those two property is set, we have an unexisting entity on shotgun
+        if item.need_creation:
             self.ui.context_widget.show()
-            self.ui.context_widget.context_label.setText(
-                "Task and Entity Link to apply to the selected item:"
-            )
-            self.ui.context_widget.set_context(item.context)
+            self.ui.context_widget.toggle_search_event(False, False)
+            label_text = "Task and link info are read only when entity creation is on: <br>"
+            if item.task_override:
+                label_text += "Task <b>need to be created</b> <br>"
+            else:
+                label_text += "No Task needed for entity creation <br>"
+
+            if item.link_override:
+                label_text += "Link entity <b>need to be created</b> <br>"
+                label_text += "The new link entity <b>will be linked to</b> it's parent entity <br>"
+            else:
+                label_text += "Link entity creation depend on the parent <br>"
+                label_text += "Entity <b>need to be created</b> <br>"
+
+            self.ui.context_widget.context_label.setText(label_text)
+            self.ui.context_widget.set_context(item.context, task_display_override=item.task_override,
+                                               link_display_override=item.link_override)
         else:
-            self.ui.context_widget.hide()
+            if item.parent.is_root():
+                self.ui.context_widget.show()
+                self.ui.context_widget.toggle_search_event(True, True)
+                self.ui.context_widget.context_label.setText(
+                    "Task and Entity Link to apply to the selected item:"
+                )
+                self.ui.context_widget.set_context(item.context)
+            else:
+                self.ui.context_widget.hide()
 
         # create summary
         self.ui.item_summary_label.show()
         summary = tree_item.create_summary()
-        # generate a summary
-
-        if len(summary) == 0:
-            summary_text = "Nothing will published."
-
-        else:
-            summary_text = "<p>The following items will be published:</p>"
-            summary_text += "".join(["<p>%s</p>" % line for line in summary])
-
-        self.ui.item_summary.setText(summary_text)
-
-        # skip settings for now
-        ## render settings
-        #self.ui.item_settings.set_static_data(
-        #    [(p, item.properties[p]) for p in item.properties]
-        #)
-
-    def _create_multiple_item_details(self, item_selection):
-        """
-        Render the detail pane for multiple items.
-
-        This function consider that the different items have similar properties
-
-        :param new_task_selection: A :class:`ItemSelection` containing the current UI selection.
-        """
-        self._current_item = item_selection
-        self.ui.details_stack.setCurrentIndex(self.ITEM_DETAILS)
-        self.ui.item_icon.setPixmap(item_selection.icon)
-
-        self.ui.item_name.setText(item_selection.name)
-        self.ui.item_type.setText(item_selection.display_type)
-
-        # check the state of screenshot
-        if item_selection.thumbnail_enabled:
-            # display and make thumbnail editable
-            self.ui.item_thumbnail_label.show()
-            self.ui.item_thumbnail.show()
-            self.ui.item_thumbnail.setEnabled(True)
-
-        elif not item_selection.thumbnail_enabled and item_selection.thumbnail:
-            # show thumbnail but disabled
-            self.ui.item_thumbnail_label.show()
-            self.ui.item_thumbnail.show()
-            self.ui.item_thumbnail.setEnabled(False)
-
-        else:
-            # hide thumbnail
-            self.ui.item_thumbnail_label.hide()
-            self.ui.item_thumbnail.hide()
-
-        self.ui.item_description_label.setText("Description")
-        self.ui.item_comments.setPlainText(item_selection.description)
-        self.ui.item_thumbnail.set_thumbnail(item_selection.thumbnail)
-
-        # TODO - Manage multiple item parent
-        if item_selection.parent.is_root():
-            self.ui.context_widget.show()
-            self.ui.context_widget.context_label.setText(
-                "Task and Entity Link to apply to the selected item:"
-            )
-            self.ui.context_widget.set_context(item_selection.context)
-        else:
-            self.ui.context_widget.hide()
-
-        # create summary
-        self.ui.item_summary_label.show()
-        summary = item_selection.create_summary()
         # generate a summary
 
         if len(summary) == 0:
@@ -1357,6 +1319,42 @@ class _ItemSelection(object):
         """
         if self._items:
             return self._items[0].parent
+        else:
+            return None
+
+    @property
+    def task_override(self):
+        """
+        Return the task_override string. Should always be the same for all items
+
+        :returns: Return the task_override of all item
+        """
+        if self._items:
+            return self._items[0].task_override
+        else:
+            return None
+
+    @property
+    def link_override(self):
+        """
+        Return the link_override string. Should always be the same for all items
+
+        :returns: Return the link_override of all item
+        """
+        if self._items:
+            return self._items[0].link_override
+        else:
+            return None
+
+    @property
+    def need_creation(self):
+        """
+        Return need creation boolean of all item. Should always be the same for all items
+
+        :returns: Return the parent of all items
+        """
+        if self._items:
+            return self._items[0].need_creation
         else:
             return None
 
