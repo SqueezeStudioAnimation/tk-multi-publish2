@@ -83,11 +83,17 @@ class PublishTreeWidget(QtGui.QTreeWidget):
             # orphan. Don't create it
             return None
 
-        if level == 0:
-            ui_item = TopLevelTreeNodeItem(item, tree_parent)
+        ui_item = None
+
+        # TODO - Probably use another variable for this check
+        # It will create an item with an handle, to facilitate the expand functionnality
+        if item.allow_show_context_readonly:
+            ui_item = TreeNodeItem(item, tree_parent, show_handle=True)
         else:
-            if len(item.tasks) > 0 or len(item.children) > 0:
-                ui_item = TreeNodeItem(item, tree_parent, show_handle=True)
+            if level == 0:
+                ui_item = TopLevelTreeNodeItem(item, tree_parent)
+            else:
+                ui_item = TreeNodeItem(item, tree_parent)
 
         # set expand state for item
         ui_item.setExpanded(item.expanded)

@@ -548,21 +548,22 @@ class AppDialog(QtGui.QWidget):
         self.ui.item_thumbnail.set_thumbnail(item.thumbnail)
 
         # If one of those two property is set, we have an unexisting entity on shotgun
-        if item.need_creation:
+        if item.allow_show_context_readonly:
             self.ui.context_widget.show()
             self.ui.context_widget.toggle_search_event(False, False)
-            label_text = "Task and link info are read only when entity creation is on: <br>"
-            if item.task_override:
-                label_text += "Task <b>need to be created</b> <br>"
-            else:
-                label_text += "No Task needed for entity creation <br>"
 
-            if item.link_override:
-                label_text += "Link entity <b>need to be created</b> <br>"
-                label_text += "The new link entity <b>will be linked to</b> it's parent entity <br>"
+            label_text = "<b>Information is Read-Only during mocap blade database Publish</b> <br>"
+            if item.task_override or item.link_override:
+                if item.task_override:
+                    label_text += "Task <b>need to be created</b> <br>"
+                else:
+                    label_text += "<b>No Task needed</b> for entity creation <br>"
+
+                if item.link_override:
+                    label_text += "Link entity <b>need to be created</b> <br>"
+                    label_text += "The new entity parent will be the previous item <br>"
             else:
-                label_text += "Link entity creation depend on the parent <br>"
-                label_text += "Entity <b>need to be created</b> <br>"
+                label_text += "Task and Entity Link to apply to the selected item <br>"
 
             self.ui.context_widget.context_label.setText(label_text)
             self.ui.context_widget.set_context(item.context, task_display_override=item.task_override,

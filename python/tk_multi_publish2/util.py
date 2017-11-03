@@ -335,7 +335,7 @@ def get_conflicting_publishes(context, path, publish_name, filters=None):
 
     # run the
     publishes = publisher.shotgun.find(
-        "PublishedFile",
+        publisher.tank.pipeline_configuration.get_published_file_entity_type(),
         publish_filters,
         ["path"]
     )

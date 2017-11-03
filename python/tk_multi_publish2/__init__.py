@@ -20,7 +20,6 @@ def show_dialog(app):
     # defer imports so that the app works gracefully in batch modes
     from .dialog import AppDialog
 
-    '''
     import sys, os
 
     paths = (
@@ -40,7 +39,6 @@ def show_dialog(app):
         sys.path.append(debug_path)
     import pydevd
     pydevd.settrace('localhost', port=64304, stdoutToServer=True, stderrToServer=True, suspend=False)
-    '''
 
     # start ui
     app.engine.show_dialog("Shotgun Publish", app, AppDialog)

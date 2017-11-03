@@ -58,7 +58,7 @@ class Item(object):
         # Use in case where the entity wanted doesn't exist
         self._task_override = None
         self._link_override = None
-        self._need_creation = False
+        self._allow_show_context_readonly = False
 
     def __repr__(self):
         """
@@ -235,17 +235,17 @@ class Item(object):
 
     link_override = property(_get_link_override, _set_link_override)
 
-    def _get_need_creation(self):
+    def _get_allow_show_context_readonly(self):
         """
-        The need creation of the item as a bool.
+        The allow show context readonly of the item as a bool.
         """
-        return self._need_creation
+        return self._allow_show_context_readonly
 
-    def _set_need_creation(self, need_creation):
-        # setter for need creation
-        self._need_creation = need_creation
+    def _set_allow_show_context_readonly(self, need_creation):
+        # setter for show context readonly
+        self._allow_show_context_readonly = need_creation
 
-    need_creation = property(_get_need_creation, _set_need_creation)
+    allow_show_context_readonly = property(_get_allow_show_context_readonly, _set_allow_show_context_readonly)
 
     def _get_type(self):
         """
