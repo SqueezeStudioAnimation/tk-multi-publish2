@@ -66,30 +66,73 @@ COMMON_FILE_INFO = {
 }
 
 
-
 class BasicSceneCollector(HookBaseClass):
     """
     A basic collector that handles files and general objects.
+
+    This collector hook is used to collect individual files that are browsed or
+    dragged and dropped into the Publish2 UI. It can also be subclassed by other
+    collectors responsible for creating items for a file to be published such as
+    the current Maya session file.
+
+    This plugin centralizes the logic for collecting a file, including
+    determining how to display the file for publishing (based on the file
+    extension).
+
+    In addition to creating an item to publish, this hook will set the following
+    properties on the item::
+
+        path - The path to the file to publish. This could be a path
+            representing a sequence of files (including a frame specifier).
+
+        sequence_paths - If the item represents a collection of files, the
+            plugin will populate this property with a list of files matching
+            "path".
+
     """
 
-    def process_current_session(self, parent_item):
+    @property
+    def settings(self):
+        """
+        Dictionary defining the settings that this collector expects to receive
+        through the settings parameter in the process_current_session and
+        process_file methods.
+
+        A dictionary on the following form::
+
+            {
+                "Settings Name": {
+                    "type": "settings_type",
+                    "default": "default_value",
+                    "description": "One line description of the setting"
+            }
+
+        The type string should be one of the data types that toolkit accepts as
+        part of its environment configuration.
+        """
+        return {}
+
+    def process_current_session(self, settings, parent_item):
         """
         Analyzes the current scene open in a DCC and parents a subtree of items
         under the parent_item passed in.
 
+        :param dict settings: Configured settings for this collector
         :param parent_item: Root item instance
         """
 
         # default implementation does not do anything
         pass
 
-    def process_file(self, parent_item, path):
+    def process_file(self, settings, parent_item, path):
         """
         Analyzes the given file and creates one or more items
         to represent it.
 
+        :param dict settings: Configured settings for this collector
         :param parent_item: Root item instance
         :param path: Path to analyze
+
         :returns: The main item that was created, or None if no item was created
             for the supplied path
         """
@@ -156,8 +199,7 @@ class BasicSceneCollector(HookBaseClass):
         if is_sequence:
             # include an indicator that this is an image sequence and the known
             # file that belongs to this sequence
-            file_item.properties["is_sequence"] = True
-            file_item.properties["sequence_files"] = [path]
+            file_item.properties["sequence_paths"] = [path]
 
         self.logger.info("Collected file: %s" % (evaluated_path,))
 
@@ -220,8 +262,7 @@ class BasicSceneCollector(HookBaseClass):
             # all we know about the file is its path. set the path in its
             # properties for the plugins to use for processing.
             file_item.properties["path"] = image_seq_path
-            file_item.properties["is_sequence"] = True
-            file_item.properties["sequence_files"] = img_seq_files
+            file_item.properties["sequence_paths"] = img_seq_files
 
             self.logger.info("Collected file: %s" % (image_seq_path,))
 
@@ -293,13 +334,15 @@ class BasicSceneCollector(HookBaseClass):
             (category_type, _) = mimetypes.guess_type(filename)
 
             if category_type:
-                # mimetypes.guess_type() output use default system encoding.
-                # make sure it is utf-8 encoded.
-                if isinstance(category_type, unicode):
-                   category_type = category_type.encode("utf-8")
-                elif isinstance(category_type, str):
-                   category_type = unicode(category_type,"utf-8")
 
+                # mimetypes.guess_type can return unicode strings depending on
+                # the system's default encoding. If a unicode string is
+                # returned, we simply ensure it's utf-8 encoded to avoid issues
+                # with toolkit, which expects utf-8
+                if isinstance(category_type, unicode):
+                    category_type = category_type.encode("utf-8")
+
+                # the category portion of the mimetype
                 category = category_type.split("/")[0]
 
                 type_display = "%s File" % (category.title(),)
@@ -318,13 +361,12 @@ class BasicSceneCollector(HookBaseClass):
 
     def _get_icon_path(self, icon_name):
         """
-        Helper to get the full path to an icon one level up in an "icons"
-        folder. If the supplied icon_name doesn't exist there, fall back to the
-        file.png icon.
+        Helper to get the full path to an icon from the app's resources folder.
+        If the supplied icon_name doesn't exist there, fall back to the file.png
+        icon.
         """
         icon_path = os.path.join(
             self.disk_location,
-            os.pardir,
             "icons",
             icon_name
         )
@@ -333,7 +375,6 @@ class BasicSceneCollector(HookBaseClass):
         if not os.path.exists(icon_path):
             icon_path = os.path.join(
                 self.disk_location,
-                os.pardir,
                 "icons",
                 "file.png"
             )

@@ -10,8 +10,8 @@
 
 import os
 import pprint
-import sgtk
 import sys
+import sgtk
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -206,8 +206,20 @@ class UploadVersionPlugin(HookBaseClass):
         publisher = self.parent
         path = item.properties["path"]
 
-        # get the publish name for this file path.
-        publish_name = publisher.util.get_publish_name(path)
+        # allow the publish name to be supplied via the item properties. this is
+        # useful for collectors that have access to templates and can determine
+        # publish information about the item that doesn't require further, fuzzy
+        # logic to be used here (the zero config way)
+        publish_name = item.properties.get("publish_name")
+        if not publish_name:
+
+            self.logger.debug("Using path info hook to determine publish name.")
+
+            # get the publish name for this file path. this will ensure we get a
+            # consistent name across version publishes of this file.
+            publish_name = publisher.util.get_publish_name(path)
+
+        self.logger.debug("Publish name: %s" % (publish_name,))
 
         self.logger.info("Creating Version...")
         version_data = {
@@ -249,17 +261,17 @@ class UploadVersionPlugin(HookBaseClass):
         if settings["Upload"].value:
             self.logger.info("Uploading content...")
 
-            # upload() triggers calls to os.path.* methods in tk-core python.py that
-            # may not work with utf-8
-            if sys.platform.startswith("win")  == True:
-              upload_path_call = path.decode("utf-8")
+            # on windows, ensure the path is utf-8 encoded to avoid issues with
+            # the shotgun api
+            if sys.platform.startswith("win"):
+                upload_path = path.decode("utf-8")
             else:
-              upload_path_call = path
+                upload_path = path
 
             self.parent.shotgun.upload(
                 "Version",
                 version["id"],
-                upload_path_call,
+                upload_path,
                 "sg_uploaded_movie"
             )
         elif thumb:

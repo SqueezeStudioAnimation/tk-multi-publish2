@@ -33,10 +33,7 @@ class TreeNodeItem(TreeNodeBase):
         self._item = item
         self._show_handle = show_handle
         super(TreeNodeItem, self).__init__(parent)
-        self.setFlags(
-            QtCore.Qt.ItemIsEnabled |
-            QtCore.Qt.ItemIsSelectable
-        )
+        self.setFlags(self.flags() | QtCore.Qt.ItemIsSelectable)
 
     def _create_widget(self, parent):
         """
@@ -124,12 +121,14 @@ class TopLevelTreeNodeItem(TreeNodeItem):
         :param parent: The parent QWidget for this control
         """
         super(TopLevelTreeNodeItem, self).__init__(item, parent)
-        # top level items can be dragged
-        self.setFlags(
-            QtCore.Qt.ItemIsEnabled |
-            QtCore.Qt.ItemIsSelectable |
-            QtCore.Qt.ItemIsDragEnabled
-        )
+
+        # ensure items that allow context change are draggable
+        if self.item.context_change_allowed:
+            flags = QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsDragEnabled
+        else:
+            flags = QtCore.Qt.ItemIsSelectable
+
+        self.setFlags(self.flags() | flags)
 
     def _create_widget(self, parent):
         """
@@ -137,8 +136,8 @@ class TopLevelTreeNodeItem(TreeNodeItem):
         """
         widget = super(TopLevelTreeNodeItem, self)._create_widget(parent)
 
-        # show the drag handle for top level nodes
-        widget.ui.drag_handle.show()
+        # show the proper drag handle
+        widget.show_drag_handle(self.item.context_change_allowed)
 
         return widget
 
