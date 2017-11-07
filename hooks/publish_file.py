@@ -84,28 +84,39 @@ class BasicFilePublishPlugin(HookBaseClass):
         Dictionary defining the settings that this plugin expects to recieve
         through the settings parameter in the accept, validate, publish and
         finalize methods.
-
         A dictionary on the following form::
-
             {
                 "Settings Name": {
                     "type": "settings_type",
                     "default": "default_value",
                     "description": "One line description of the setting"
             }
-
         The type string should be one of the data types that toolkit accepts
         as part of its environment configuration.
         """
         return {
             "File Types": {
                 "type": "list",
-                "default": "[]",
+                "default": [
+                    ["Alembic Cache", "abc"],
+                    ["3dsmax Scene", "max"],
+                    ["NukeStudio Project", "hrox"],
+                    ["Houdini Scene", "hip", "hipnc"],
+                    ["Maya Scene", "ma", "mb"],
+                    ["Nuke Script", "nk"],
+                    ["Photoshop Image", "psd", "psb"],
+                    ["Rendered Image", "dpx", "exr"],
+                    ["Texture", "tiff", "tx", "tga", "dds"],
+                    ["Image", "jpeg", "jpg", "png"],
+                    ["Movie", "mov", "mp4"],
+                    ["Motion Builder FBX", "fbx"],
+                ],
                 "description": (
                     "List of file types to include. Each entry in the list "
                     "is a list in which the first entry is the Shotgun "
                     "published file type and subsequent entries are file "
-                    "extensions that should be associated.")
+                    "extensions that should be associated."
+                )
             },
         }
 
