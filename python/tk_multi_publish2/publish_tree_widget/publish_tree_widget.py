@@ -157,6 +157,11 @@ class PublishTreeWidget(QtGui.QTreeWidget):
                     # no longer in the plugin mgr. remove from tree
                     top_level_item.takeChild(item_index)
                 else:
+                    # Property added to force rebuilding a top node item tree in case the collector
+                    # added items in the tree of this top node item without creating a new child to it
+                    if item.item.properties.get("force_rebuild_node", None):
+                        top_level_item.takeChild(item_index)
+                        continue
                     # an active item
                     top_level_items_in_tree.append(item.item)
                     # check that items are parented under the right context

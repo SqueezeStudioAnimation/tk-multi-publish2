@@ -88,7 +88,7 @@ class UploadVersionPlugin(HookBaseClass):
         return {
             "File Extensions": {
                 "type": "str",
-                "default": "jpeg, jpg, png, mov, mp4",
+                "default": "jpeg, jpg, png, mov, mp4, avi",
                 "description": "File Extensions of files to include"
             },
             "Upload": {
@@ -201,6 +201,9 @@ class UploadVersionPlugin(HookBaseClass):
             instances.
         :param item: Item to process
         """
+
+        # TODO - Test after publish is totally functional
+        return
 
         publisher = self.parent
         path = item.properties["path"]
