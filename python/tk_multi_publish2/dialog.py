@@ -11,7 +11,6 @@
 import traceback
 
 import sgtk
-from sgtk import TankError
 from sgtk.platform.qt import QtCore, QtGui
 
 from .ui.dialog import Ui_Dialog
@@ -42,9 +41,6 @@ class AppDialog(QtGui.QWidget):
     # details ui panes
     (ITEM_DETAILS, TASK_DETAILS, PLEASE_SELECT_DETAILS, MULTI_EDIT_NOT_SUPPORTED) = range(4)
 
-    # settings ui panes, those are both present on the TASK_DETAILS pane.
-    (BUILTIN_TASK_DETAILS, CUSTOM_TASK_DETAILS) = range(2)
-
     def __init__(self, parent=None):
         """
         :param parent: The parent QWidget for this control
@@ -66,12 +62,32 @@ class AppDialog(QtGui.QWidget):
         shotgun_globals.register_bg_task_manager(self._task_manager)
 
         self._bundle = sgtk.platform.current_bundle()
+        self._validation_run = False
 
         # set up the UI
         self.ui = Ui_Dialog()
         self.ui.setupUi(self)
 
         self.ui.context_widget.set_up(self._task_manager)
+        self.ui.context_widget.restrict_entity_types_by_link("PublishedFile", "entity")
+
+        self.ui.context_widget.set_task_tooltip(
+            "<p>The task that the selected item will be associated with "
+            "in Shotgun after publishing. It is recommended to always "
+            "fill out the Task field when publishing. The menu button "
+            "to the right will provide suggestions for Tasks to publish "
+            "to including the Tasks assigned to you, recently used Tasks, "
+            "and Tasks related to the entity Link populated in the field below.</p>"
+        )
+        self.ui.context_widget.set_link_tooltip(
+            "<p>The entity that the selected item will be associated with "
+            "in Shotgun after publishing. By selecting a Task in the field "
+            "above, the Link will automatically be populated. It is recommended "
+            "that you always populate the Task field when publishing. "
+            "The Task menu above will display any tasks associated with "
+            "the entity populated in this field.</p>"
+        )
+
         self.ui.context_widget.context_changed.connect(self._on_item_context_change)
 
         # make sure the splitter expands the detail area only
@@ -88,6 +104,9 @@ class AppDialog(QtGui.QWidget):
         self.ui.large_drop_area.something_dropped.connect(self._on_drop)
         self.ui.items_tree.tree_reordered.connect(self._synchronize_tree)
 
+        # hide the drag screen progress button by default
+        self.ui.drag_progress_message.hide()
+
         # buttons
         self.ui.validate.clicked.connect(self.do_validate)
         self.ui.publish.clicked.connect(self.do_publish)
@@ -96,7 +115,7 @@ class AppDialog(QtGui.QWidget):
 
         # overlay
         self._overlay = SummaryOverlay(self.ui.main_frame)
-        self._overlay.ui.close.clicked.connect(self._overlay_close_button_clicked)
+        self._overlay.publish_again_clicked.connect(self._publish_again_clicked)
 
         # settings
         self.ui.items_tree.status_clicked.connect(self._on_publish_status_clicked)
@@ -134,11 +153,42 @@ class AppDialog(QtGui.QWidget):
             # no url. hide the button!
             self.ui.help.hide()
 
+        # browse file action
+        self._browse_file_action = QtGui.QAction(self)
+        self._browse_file_action.setText("Browse files to publish")
+        self._browse_file_action.setIcon(
+            QtGui.QIcon(":/tk_multi_publish2/file.png"))
+        self._browse_file_action.triggered.connect(
+            lambda: self._on_browse(folders=False))
+
+        # browse folder action
+        self._browse_folder_action = QtGui.QAction(self)
+        self._browse_folder_action.setText(
+            "Browse folders to publish image sequences")
+        self._browse_folder_action.setIcon(QtGui.QIcon(
+            ":/tk_multi_publish2/image_sequence.png"))
+        self._browse_folder_action.triggered.connect(
+            lambda: self._on_browse(folders=True))
+
+        # browse menu
+        self._browse_menu = QtGui.QMenu(self)
+        self._browse_menu.addAction(self._browse_file_action)
+        self._browse_menu.addAction(self._browse_folder_action)
+
         # browse tool button
         self.ui.browse.clicked.connect(self._on_browse)
+        self.ui.browse.setMenu(self._browse_menu)
+        self.ui.browse.setPopupMode(QtGui.QToolButton.DelayedPopup)
 
-        # drop area browse button
-        self.ui.drop_area_browse.clicked.connect(self._on_browse)
+        # drop area browse button. Note, not using the actions created above
+        # because making the buttons look right when they're usingt he action's
+        # text/icon proved difficult. Instead, the button text/icon are defined
+        # in the designer file. So as a note, if you want to change the text or
+        # icon, you'll need to do it above and in designer.
+        self.ui.drop_area_browse_file.clicked.connect(
+            lambda: self._on_browse(folders=False))
+        self.ui.drop_area_browse_seq.clicked.connect(
+            lambda: self._on_browse(folders=True))
 
         # currently displayed item
         self._current_item = None
@@ -163,20 +213,30 @@ class AppDialog(QtGui.QWidget):
         )
 
         # link the summary overlay status button with the log window
-        self._overlay.ui.details.clicked.connect(self._progress_handler._progress_details.toggle)
+        self._overlay.info_clicked.connect(
+            self._progress_handler._progress_details.toggle)
+
+        # connect the drag screen progress button to show the progress details
+        self.ui.drag_progress_message.clicked.connect(
+            self._progress_handler.show_details)
 
         # hide settings for now
         self.ui.item_settings_label.hide()
-        self.ui.task_settings_label.hide()
         self.ui.item_settings.hide()
-        self.ui.task_settings.hide()
 
         # create a plugin manager
         self._plugin_manager = PluginManager(self._progress_handler.logger)
         self.ui.items_tree.set_plugin_manager(self._plugin_manager)
 
+        # this is the pixmap in the summary thumbnail
+        self._summary_thumbnail = None 
+
+        # set publish button text
+        self._display_action_name = self._bundle.get_setting("display_action_name")
+        self.ui.publish.setText(self._display_action_name)
+
         # run collections
-        self._full_rebuild()
+        self._full_rebuild()        
 
     def keyPressEvent(self, event):
         """
@@ -319,35 +379,16 @@ class AppDialog(QtGui.QWidget):
             # Note: At this point we don't really care if current task actually had a UI, we can
             # certainly tear down an empty widget.
             logger.debug("The ui is going to change, so clear the current one.")
-            self.ui.custom_settings_page.widget = None
+            self.ui.task_settings.widget = None
             self._current_tasks = new_task_selection
             return
 
         # A task was picked, so make sure our page is in foreground.
         self.ui.details_stack.setCurrentIndex(self.TASK_DETAILS)
 
+        # set the header for the task plugin
         self.ui.task_icon.setPixmap(new_task_selection.plugin.icon)
         self.ui.task_name.setText(new_task_selection.plugin.name)
-
-        # If the new task selection does not have a custom UI, a simple tear down of the custom UI
-        # and setting the built-in fields will suffice.
-        if not new_task_selection.has_custom_ui:
-            logger.debug("Clearing custom UI and using default task details...")
-            self.ui.custom_settings_page.widget = None
-
-            # All the items are of the same type,
-            self.ui.settings_stack.setCurrentIndex(self.BUILTIN_TASK_DETAILS)
-            self.ui.task_description.setText(new_task_selection.plugin.description)
-
-            # skip settings for now
-            # self.ui.task_settings.set_data(task.settings.values())
-
-            self._current_tasks = new_task_selection
-            return
-
-        # At this point we can assume we're going to have to show a UI, because new task exists
-        # and it has a custom UI.
-        self.ui.settings_stack.setCurrentIndex(self.CUSTOM_TASK_DETAILS)
 
         # Now figure out if we need to create/replace the widgets.
         if (
@@ -359,8 +400,9 @@ class AppDialog(QtGui.QWidget):
             logger.debug("Reusing custom ui from %s.", new_task_selection.plugin)
         else:
             logger.debug("Building a custom ui for %s.", new_task_selection.plugin)
-            widget = new_task_selection.plugin.run_create_settings_widget(self.ui.custom_settings_page)
-            self.ui.custom_settings_page.widget = widget
+            widget = new_task_selection.plugin.run_create_settings_widget(
+                self.ui.task_settings_parent)
+            self.ui.task_settings.widget = widget
 
         # Update the UI with the settings from the current plugin.
         if self._push_settings_into_ui(new_task_selection):
@@ -377,7 +419,7 @@ class AppDialog(QtGui.QWidget):
             on the values edited in the UI.
         """
         if selected_tasks.has_custom_ui:
-            widget = self.ui.custom_settings_page.widget
+            widget = self.ui.task_settings.widget
             settings = self._current_tasks.get_settings(widget)
         else:
             # TODO: Implement getting the settings from the generic UI, if we ever implement one.
@@ -408,7 +450,7 @@ class AppDialog(QtGui.QWidget):
 
         if selected_tasks.has_custom_ui:
             try:
-                selected_tasks.set_settings(self.ui.custom_settings_page.widget, tasks_settings)
+                selected_tasks.set_settings(self.ui.task_settings.widget, tasks_settings)
             except NotImplementedError:
                 self.ui.details_stack.setCurrentIndex(self.MULTI_EDIT_NOT_SUPPORTED)
                 return False
@@ -463,8 +505,19 @@ class AppDialog(QtGui.QWidget):
         thumbnail pixmap
         """
         if not self._current_item:
-            raise TankError("No current item set!")
-        self._current_item.thumbnail = pixmap
+            # this is the summary item
+            self._summary_thumbnail = pixmap
+            if pixmap:
+                # update all items with the summary thumbnail
+                for top_level_item in self._plugin_manager.top_level_items:
+                    top_level_item.thumbnail = self._summary_thumbnail
+                    top_level_item.thumbnail_explicit = False
+                    top_level_item._propagate_thumbnail_to_children()
+        else: 
+            self._current_item.thumbnail = pixmap
+            # specify that the new thumbnail overrides the one inherited from summary
+            self._current_item.thumbnail_explicit = True 
+
 
     def _create_item_details(self, tree_item):
         """
@@ -499,7 +552,18 @@ class AppDialog(QtGui.QWidget):
 
         self.ui.item_description_label.setText("Description")
         self.ui.item_comments.setPlainText(item.description)
+
+        # if summary thumbnail is defined, item thumbnail should inherit it
+        # unless item thumbnail was set after summary thumbnail
+        if self._summary_thumbnail and not item.thumbnail_explicit:
+            item.thumbnail = self._summary_thumbnail
+        
+        self.ui.item_thumbnail._set_multiple_values_indicator(False)
         self.ui.item_thumbnail.set_thumbnail(item.thumbnail)
+        
+
+        # Items with default thumbnails should still be able to have override thumbnails set by the user
+        self.ui.item_thumbnail.setEnabled(True)
 
         if item.parent.is_root():
             self.ui.context_widget.show()
@@ -512,8 +576,8 @@ class AppDialog(QtGui.QWidget):
             else:
                 self.ui.context_widget.enable_editing(
                     False,
-                    "<p>This item does not support publishing to a different "
-                    "task or link. It will be published to "
+                    "<p>Context changing has been disabled for this item. "
+                    "It will be associated with "
                     "<strong><a style='color:#C8C8C8; text-decoration:none' "
                     "href='%s'>%s</a></strong></p>" %
                     (item.context.shotgun_url, item.context)
@@ -530,10 +594,10 @@ class AppDialog(QtGui.QWidget):
         # generate a summary
 
         if len(summary) == 0:
-            summary_text = "Nothing will published."
+            summary_text = "No items to process."
 
         else:
-            summary_text = "<p>The following items will be published:</p>"
+            summary_text = "<p>The following items will be processed:</p>"
             summary_text += "".join(["<p>%s</p>" % line for line in summary])
 
         self.ui.item_summary.setText(summary_text)
@@ -551,11 +615,24 @@ class AppDialog(QtGui.QWidget):
         self._current_item = None
         self.ui.details_stack.setCurrentIndex(self.ITEM_DETAILS)
 
-        self.ui.item_name.setText("Publish Summary")
+        display_name = self._bundle.get_setting("display_name")
+        self.ui.item_name.setText("%s Summary"%display_name)
         self.ui.item_icon.setPixmap(QtGui.QPixmap(":/tk_multi_publish2/icon_256.png"))
 
-        self.ui.item_thumbnail_label.hide()
-        self.ui.item_thumbnail.hide()
+        self.ui.item_thumbnail_label.show()
+        self.ui.item_thumbnail.show()
+
+        thumbnail_is_multiple_values = False
+        for top_level_item in self._plugin_manager.top_level_items:
+           if top_level_item._get_thumbnail_explicit_recursive():
+               thumbnail_is_multiple_values = True
+               break
+      
+        self.ui.item_thumbnail._set_multiple_values_indicator(thumbnail_is_multiple_values)
+        self.ui.item_thumbnail.set_thumbnail(self._summary_thumbnail)
+
+        # setting enabled to true to be able to take a snapshot to define the thumbnail 
+        self.ui.item_thumbnail.setEnabled(True)
 
         self.ui.item_description_label.setText("Description for all items")
         self.ui.item_comments.setPlainText(self._summary_comment)
@@ -633,6 +710,9 @@ class AppDialog(QtGui.QWidget):
         # select summary
         self.ui.items_tree.select_first_item()
 
+        # reset the validation flag
+        self._validation_run = False
+
     def _on_drop(self, files):
         """
         When someone drops stuff into the publish.
@@ -651,7 +731,14 @@ class AppDialog(QtGui.QWidget):
 
         try:
             self.ui.main_stack.setCurrentIndex(self.PUBLISH_SCREEN)
+
+            # ensure the progress details are parented here in case we get
+            # stuck here.
+            self._progress_handler.progress_details.set_parent(
+                self.ui.main_frame)
+
             self._overlay.show_loading()
+            self.ui.button_container.hide()
             num_items_created = self._plugin_manager.add_external_files(str_files)
             num_errors = self._progress_handler.pop()
 
@@ -671,6 +758,23 @@ class AppDialog(QtGui.QWidget):
 
         finally:
             self._overlay.hide()
+            self.ui.button_container.show()
+
+        if (len(self._plugin_manager.top_level_items) == 0 and
+            self.ui.main_stack.currentIndex() == self.DRAG_SCREEN):
+            # there are no top-level items and we're still on the drag screen.
+            # something not good happened. show a button to open the progress
+            # details with additional info.
+
+            self.ui.drag_progress_message.setText(
+                "Could not determine items to %s. "
+                "Click for more info..." %
+                (self._display_action_name,)
+            )
+            self.ui.drag_progress_message.show()
+        else:
+            # there are items and/or we're no longer on the drag screen
+            self.ui.drag_progress_message.hide()
 
         # lastly, select the summary
         self.ui.items_tree.select_first_item()
@@ -683,8 +787,18 @@ class AppDialog(QtGui.QWidget):
         if len(self._plugin_manager.top_level_items) == 0:
             # nothing in list. show the full screen drag and drop ui
             self.ui.main_stack.setCurrentIndex(self.DRAG_SCREEN)
+
+            # ensure the progress details widget is available for overlay on the
+            # drop area
+            self._progress_handler.progress_details.set_parent(
+                self.ui.large_drop_area)
         else:
             self.ui.main_stack.setCurrentIndex(self.PUBLISH_SCREEN)
+
+            # ensure the progress details widget is available for overlay on the
+            # main frame of the publish ui
+            self._progress_handler.progress_details.set_parent(
+                self.ui.main_frame)
             self.ui.items_tree.build_tree()
 
     def _set_tree_items_expanded(self, expanded):
@@ -839,6 +953,9 @@ class AppDialog(QtGui.QWidget):
                 # reset the progress
                 self._progress_handler.reset_progress()
 
+        # remember that validation has completed at least once
+        self._validation_run = True
+
         return num_issues
 
     def do_publish(self):
@@ -846,6 +963,9 @@ class AppDialog(QtGui.QWidget):
         Perform a full publish
         """
         publish_failed = False
+
+        # hide the action buttons during publish
+        self.ui.button_container.hide()
 
         # Make sure that settings from the current selection are retrieved from the UI and applied
         # back on the tasks.
@@ -855,14 +975,45 @@ class AppDialog(QtGui.QWidget):
             # show cancel button
             self.ui.stop_processing.show()
 
-            issues = self.do_validate(standalone=False)
+            # is the app configured to execute the validation when publish
+            # is triggered?
+            if self._bundle.get_setting("validate_on_publish"):
+                # do_validate returns the number of issues encountered
+                if self.do_validate(standalone=False) > 0:
+                    self._progress_handler.logger.error(
+                        "Validation errors detected. "
+                        "Not proceeding with publish."
+                    )
+                    self.ui.button_container.show()
+                    return
 
-            if issues > 0:
-                self._progress_handler.logger.error("Validation errors detected. Not proceeding with publish.")
-                return
+            # validation not required on publish, it has already run though
+            elif self._validation_run:
+                self._progress_handler.logger.info(
+                    "Skipping validation pass just before publish. "
+                    "It was already run manually.")
+
+            # validation not required on publish. no validation done yet
+            else:
+                # get user confirmation that they would like to continue
+                button_clicked = QtGui.QMessageBox.question(
+                    self,
+                    "%s without Validation?" % (self._display_action_name,),
+                    "You are attempting to %s without validation. Are you sure "
+                    "you wish to continue?" % (self._display_action_name,),
+                    buttons=QtGui.QMessageBox.Yes | QtGui.QMessageBox.Cancel
+                )
+                if button_clicked == QtGui.QMessageBox.Cancel:
+                    # user does not want ot continue.
+                    self.ui.button_container.show()
+                    return
+
+                self._progress_handler.logger.info(
+                    "User skipped validation step.")
 
             if self._stop_processing_flagged:
                 # stop processing
+                self.ui.button_container.show()
                 return
 
             # inform the progress system of the current mode
@@ -906,6 +1057,7 @@ class AppDialog(QtGui.QWidget):
             # if stop processing was flagged, don't show summary at end
             if self._stop_processing_flagged:
                 self._progress_handler.logger.info("Processing aborted by user.")
+                self.ui.button_container.show()
                 return
 
         finally:
@@ -938,17 +1090,29 @@ class AppDialog(QtGui.QWidget):
             self._progress_handler.logger.info("Publish Complete! For details, click here.")
             self._overlay.show_success()
 
-    def _overlay_close_button_clicked(self):
+    def _publish_again_clicked(self):
         """
         Slot that should be called when summary overlay close button is clicked.
         """
+        # clear dropped files
+        self._plugin_manager.clear_external_files()
+        self._synchronize_tree()
+
         # show publish and validate buttons
         self.ui.validate.show()
         self.ui.publish.show()
         self.ui.close.hide()
 
+        self.ui.button_container.show()
+
         # hide summary overlay
         self._overlay.hide()
+
+        # select summary
+        self.ui.items_tree.select_first_item()
+
+        # reset the validation flag
+        self._validation_run = False
 
     def _visit_tree_r(self, parent, action, action_name):
         """
@@ -1017,25 +1181,44 @@ class AppDialog(QtGui.QWidget):
         if sync_required:
             self._synchronize_tree()
 
-    def _on_browse(self):
+    def _on_browse(self, folders=False):
         """Opens a file dialog to browse to files for publishing."""
 
-        file_dialog = QtGui.QFileDialog(
-            parent=self,
-            caption="Browse files to publish"
-        )
+        # options for either browse type
+        options = [
+            QtGui.QFileDialog.DontResolveSymlinks,
+            QtGui.QFileDialog.DontUseNativeDialog
+        ]
+
+        if folders:
+            # browse folders specifics
+            caption = "Browse folders to publish image sequences"
+            file_mode = QtGui.QFileDialog.Directory
+            options.append(QtGui.QFileDialog.ShowDirsOnly)
+        else:
+            # browse files specifics
+            caption = "Browse files to publish"
+            file_mode = QtGui.QFileDialog.ExistingFiles
+
+        # create the dialog
+        file_dialog = QtGui.QFileDialog(parent=self, caption=caption)
         file_dialog.setLabelText(QtGui.QFileDialog.Accept, "Select")
         file_dialog.setLabelText(QtGui.QFileDialog.Reject, "Cancel")
-        file_dialog.setOption(QtGui.QFileDialog.DontResolveSymlinks)
-        file_dialog.setOption(QtGui.QFileDialog.DontUseNativeDialog)
-        file_dialog.setFileMode(QtGui.QFileDialog.ExistingFiles)
+        file_dialog.setFileMode(file_mode)
+
+        # set the appropriate options
+        for option in options:
+            file_dialog.setOption(option)
+
+        # browse!
         if not file_dialog.exec_():
             return
 
-        files = file_dialog.selectedFiles()
-        if files:
+        # process the browsed files/folders for publishing
+        paths = file_dialog.selectedFiles()
+        if paths:
             # simulate dropping the files into the dialog
-            self._on_drop(files)
+            self._on_drop(paths)
 
     def _open_url(self, url):
         """Opens the supplied url in the appropriate browser."""

@@ -8,10 +8,10 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
-import traceback
-import sgtk
 from contextlib import contextmanager
-from sgtk.platform.qt import QtCore, QtGui
+import traceback
+
+import sgtk
 from .setting import Setting
 
 logger = sgtk.platform.get_logger(__name__)
@@ -37,14 +37,24 @@ class PluginBase(object):
 
         self._bundle = sgtk.platform.current_bundle()
 
-        # create an instance of the hook
-        self._hook_instance = self._bundle.create_hook_instance(self._path)
-
         self._logger = logger
         self._settings = {}
 
+        # create an instance of the hook
+        self._hook_instance = self._create_hook_instance(self._path)
+
         # kick things off
         self._validate_and_resolve_config()
+
+    def _create_hook_instance(self, path):
+        """
+        Create the plugin's hook instance. Subclasses can reimplement for more
+        sophisticated hook instantiation.
+
+        :param str path: The path to the hook file.
+        :return: A hook instance
+        """
+        return self._bundle.create_hook_instance(path)
 
     def __repr__(self):
         """
@@ -129,29 +139,45 @@ class PublishPlugin(PluginBase):
 
         self._icon_pixmap = self._load_plugin_icon()
 
+    def _create_hook_instance(self, path):
+        """
+        Create the plugin's hook instance.
+
+        Injects the plugin base hook class in order to provide a default
+        implementation.
+        """
+        return self._bundle.create_hook_instance(
+            path,
+            base_class=self._bundle.base_hooks.PublishPlugin
+        )
+
     def _load_plugin_icon(self):
         """
         Loads the icon defined by the hook.
 
         :returns: QPixmap or None if not found
         """
+        # TODO: this needs to be refactored. should be no UI stuff here
+        from sgtk.platform.qt import QtGui
+
         # load plugin icon
         pixmap = None
         try:
             icon_path = self._hook_instance.icon
-            try:
-                pixmap = QtGui.QPixmap(icon_path)
-            except Exception, e:
-                self._logger.warning(
-                    "%r: Could not load icon '%s': %s" % (self, icon_path, e)
-                )
+            if icon_path:
+                try:
+                    pixmap = QtGui.QPixmap(icon_path)
+                except Exception, e:
+                    self._logger.warning(
+                        "%r: Could not load icon '%s': %s" % (self, icon_path, e)
+                    )
         except AttributeError:
             # plugin does not have an icon
             pass
 
         # load default pixmap if hook doesn't define one
         if pixmap is None:
-            pixmap = QtGui.QPixmap(":/tk_multi_publish2/item.png")
+            pixmap = QtGui.QPixmap(":/tk_multi_publish2/task.png")
 
         return pixmap
 
@@ -250,6 +276,8 @@ class PublishPlugin(PluginBase):
         :param parent: Parent widget
         :type parent: :class:`QtGui.QWidget`
         """
+        # TODO: this needs to be refactored. should be no UI stuff here
+
         with self._handle_plugin_error(None, "Error laying out widgets: %s"):
             return self._hook_instance.create_settings_widget(parent)
 
@@ -260,6 +288,8 @@ class PublishPlugin(PluginBase):
         :param parent: Parent widget
         :type parent: :class:`QtGui.QWidget`
         """
+        # TODO: this needs to be refactored. should be no UI stuff here
+
         with self._handle_plugin_error(None, "Error reading settings from UI: %s"):
             return self._hook_instance.get_ui_settings(parent)
 
@@ -273,6 +303,8 @@ class PublishPlugin(PluginBase):
 
         :param settings: List of dictionary of settings as python literals.
         """
+        # TODO: this needs to be refactored. should be no UI stuff here
+
         with self._handle_plugin_error(None, "Error writing settings to UI: %s"):
             self._hook_instance.set_ui_settings(parent, settings)
 
@@ -294,6 +326,8 @@ class PublishPlugin(PluginBase):
             return {"accepted": False}
         finally:
             # give qt a chance to do stuff
+            # TODO: this needs to be refactored. should be no UI stuff here
+            from sgtk.platform.qt import QtCore
             QtCore.QCoreApplication.processEvents()
 
     def run_validate(self, settings, item):
@@ -368,6 +402,8 @@ class PublishPlugin(PluginBase):
             if success_msg:
                 self._logger.info(success_msg)
         finally:
+            # TODO: this needs to be refactored. should be no UI stuff here
+            from sgtk.platform.qt import QtCore
             QtCore.QCoreApplication.processEvents()
 
 
@@ -377,6 +413,18 @@ class CollectorPlugin(PluginBase):
 
     Each collector object reflects an instance in the app configuration.
     """
+
+    def _create_hook_instance(self, path):
+        """
+        Create the plugin's hook instance.
+
+        Injects the collector base hookclass in order to provide default
+        implementation.
+        """
+        return self._bundle.create_hook_instance(
+            path,
+            base_class=self._bundle.base_hooks.CollectorPlugin
+        )
 
     def run_process_current_session(self, item):
         """

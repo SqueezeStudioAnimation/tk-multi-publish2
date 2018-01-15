@@ -56,6 +56,9 @@ QToolButton:pressed {
     background-color: rgba(200, 200, 200, 35%);
 }
 
+QToolButton::menu-indicator#browse {
+    image: none;
+}
 
 /* --------------------------------------------------------------------- */
 /* Full screen drop area */
@@ -142,6 +145,14 @@ DropAreaFrame#large_drop_area[dragging="true"] {
     border: 2px solid {{SG_HIGHLIGHT_COLOR}};
 }
 
+#drag_progress_message {
+    border: none;
+}
+
+#drag_progress_message:hover {
+    text-decoration: underline;
+}
+
 /* left hand side frame when someone drag something in */
 DropAreaFrame[dragging="true"] {
     border: 2px solid {{SG_HIGHLIGHT_COLOR}};
@@ -163,7 +174,7 @@ DropAreaFrame[dragging="true"] {
 #items_tree::branch {
     border-image: none;
     image: none;
-    background: none;
+    background: palette(base); /* don't highlight the branch area on selection */
 }
 
 /* selection of tree items */
@@ -336,100 +347,6 @@ ProgressDetailsWidget #log_tree::item {
 
 
 /* --------------------------------------------------------------------- */
-/* context selection */
-/* --------------------------------------------------------------------- */
-
-#task_search_btn {
-    border: none;
-    padding: 4px;
-    border-radius: 2px;
-    background-color: rgba(20, 20, 20, 18%);
-}
-
-#task_search_btn:hover {
-    border: none;
-    border-radius: 2px;
-    background-color: rgba(20, 20, 20, 30%);
-}
-
-#task_search_btn:checked {
-    border: none;
-    border-radius: 2px;
-    background-color: rgba(20, 20, 20, 50%);
-}
-
-#link_search_btn {
-    border: none;
-    padding: 4px;
-    border-radius: 2px;
-    background-color: rgba(20, 20, 20, 18%);
-}
-
-#link_search_btn:hover {
-    border: none;
-    border-radius: 2px;
-    background-color: rgba(20, 20, 20, 30%);
-}
-
-#link_search_btn:checked {
-    border: none;
-    border-radius: 2px;
-    background-color: rgba(20, 20, 20, 50%);
-}
-
-#task_menu_btn {
-    border: none;
-    padding: 4px;
-    border-radius: 2px;
-    background-color: rgba(20, 20, 20, 18%);
-}
-
-#task_menu_btn::menu-indicator {
-    image: none;
-}
-
-#task_menu_btn:hover {
-    border: none;
-    border-radius: 2px;
-    background-color: rgba(20, 20, 20, 30%);
-}
-
-#task_menu_btn:checked {
-    border: none;
-    border-radius: 2px;
-    background-color: rgba(20, 20, 20, 50%);
-}
-
-#task_display {
-    padding-left: 4px;
-    border: 1px solid rgba(20, 20, 20, 18%);
-    border-radius: 2px;
-}
-
-#link_display {
-    padding-left: 4px;
-    border: 1px solid rgba(20, 20, 20, 18%);
-    border-radius: 2px;
-}
-
-#task_search {
-    padding-left: 4px;
-    border: 1px solid rgba(20, 20, 20, 18%);
-    border-radius: 2px;
-}
-
-#link_search {
-    padding-left: 4px;
-    border: 1px solid rgba(20, 20, 20, 18%);
-    border-radius: 2px;
-}
-
-
-QMenu::item::indicator {
-    margin-left: 10px;
-}
-
-/* --------------------------------------------------------------------- */
 /* Bottom toolbar */
 /* --------------------------------------------------------------------- */
 
@@ -456,7 +373,7 @@ QMenu::item::indicator {
     background-color: rgba(20, 20, 20, 50%);
 }
 
-#drop_area_browse {
+#drop_area_browse_file, #drop_area_browse_seq {
     border: none;
     border-radius: 2px;
     background-color: {{SG_HIGHLIGHT_COLOR}};
@@ -483,5 +400,22 @@ QMenu::item::indicator {
 
 #summary_frame {
     background-color: rgba(20, 20, 20, 95%);
+}
+
+/* --------------------------------------------------------------------- */
+/* Group Boxes                                                           */
+/* --------------------------------------------------------------------- */
+
+QGroupBox {
+    border: 1px solid #333333;
+    border-radius: 4px;
+    background-color: #3A3A3A;
+    margin-top: 18px;
+}
+
+QGroupBox::title {
+    top: -18px;
+    font-weight: bold;
+    font-size: 18px;
 }
 
