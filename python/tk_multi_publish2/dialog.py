@@ -465,7 +465,7 @@ class AppDialog(QtGui.QWidget):
             on the values edited in the UI.
         """
         if selected_tasks.has_custom_ui:
-            widget = self.ui.custom_settings_page.widget
+            widget = self.ui.task_settings.widget
             # SBourgoing: Ensure that the settings are deep copied to ensure more complex settings to be keep correctly
             settings = copy.deepcopy(self._current_tasks.get_settings(widget))
         else:
