@@ -9,6 +9,7 @@
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
 import traceback
+import copy
 
 import sgtk
 from sgtk import TankError
@@ -423,7 +424,8 @@ class AppDialog(QtGui.QWidget):
         """
         if selected_tasks.has_custom_ui:
             widget = self.ui.custom_settings_page.widget
-            settings = self._current_tasks.get_settings(widget)
+            # SBourgoing: Ensure that the settings are deep copied to ensure more complex settings to be keep correctly
+            settings = copy.deepcopy(self._current_tasks.get_settings(widget))
         else:
             # TODO: Implement getting the settings from the generic UI, if we ever implement one.
             settings = {}
@@ -432,8 +434,14 @@ class AppDialog(QtGui.QWidget):
         for task in selected_tasks:
             # The settings returned by the UI are actual value, not Settings objects, so apply each
             # value returned on the appropriate settings object.
-            for k, v in settings.iteritems():
-                task.settings[k].value = v
+            # SBourgoing: Add a way to let the plugin manage more complex settings
+            try:
+                # TODO - Add functionnality to be call this function from a PublishPlugin instance
+                task._plugin.run_manage_ui_settings(task, settings)
+            except AttributeError:
+                # If the apply setting fail, fallback on the old method to update settings
+                for k, v in settings.iteritems():
+                    task.settings[k].value = v
 
     def _push_settings_into_ui(self, selected_tasks):
         """

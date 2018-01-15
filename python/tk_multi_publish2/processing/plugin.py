@@ -276,6 +276,24 @@ class PublishPlugin(PluginBase):
         with self._handle_plugin_error(None, "Error writing settings to UI: %s"):
             self._hook_instance.set_ui_settings(parent, settings)
 
+    def run_manage_ui_settings(self, parent, settings):
+        """
+        Squeeze Studio - SBourgoing
+        Provide a way to let the different plugin to manage their own settings. It will allow us to have more complex
+        settings where an entry of the settings dict could contain other iterable
+
+        Take also into consideration that not try catch we be done here. It will be done when the function will be
+        called to be able to fallback on the old implementation of the settings if a plugin doesn't implement this
+        functionality
+
+        :param parent: Parent widget
+        :type parent: :class:`QtGui.QWidget`
+
+        :param settings: List of dictionary of settings as python literals.
+        """
+
+        self._hook_instance.manage_ui_settings(parent, settings)
+
     def run_accept(self, item):
         """
         Executes the hook accept method for the given item
