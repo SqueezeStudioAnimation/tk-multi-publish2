@@ -155,25 +155,13 @@ class PluginManager(object):
         :param str paths: List of full file path
         :returns: Number of items created by collectors
         """
-        # make sure we don't drop the same file twice
-        paths_to_process = []
-        skipped_path = []
-        for path in paths:
-            if path not in self._dropped_paths:
-                logger.debug("Adding external file '%s'" % path)
-                paths_to_process.append(path)
-            else:
-                logger.warning("Skipping duplicate path '%s'" % path)
-                skipped_path.append(path)
-        self._dropped_paths.extend(paths_to_process)
-
         # now run the collection for all the new items
         logger.debug("Running scene collection for new paths")
         items_created = self._collect(
             collect_current_scene=False,
             paths=paths
         )
-        return len(items_created), skipped_path
+        return len(items_created)
 
     def clear_external_files(self):
         """
