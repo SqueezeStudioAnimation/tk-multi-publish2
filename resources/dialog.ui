@@ -19,6 +19,9 @@
   <property name="accessibleName">
    <string>publish dialog</string>
   </property>
+  <property name="accessibleName">
+   <string>publish dialog</string>
+  </property>
   <layout class="QVBoxLayout" name="verticalLayout_7">
    <property name="spacing">
     <number>0</number>
