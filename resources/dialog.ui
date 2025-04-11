@@ -11,7 +11,10 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Shotgun Publish</string>
+   <string>Flow Production Tracking Publish</string>
+  </property>
+  <property name="accessibleName">
+   <string>publish dialog</string>
   </property>
   <property name="accessibleName">
    <string>publish dialog</string>

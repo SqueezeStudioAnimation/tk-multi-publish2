@@ -12,7 +12,11 @@ import traceback
 
 import sgtk
 from sgtk.platform.qt import QtCore, QtGui
-from tank_vendor import six
+
+try:
+    from tank_vendor import sgutils
+except ImportError:
+    from tank_vendor import six as sgutils
 
 from .api import PublishManager, PublishItem, PublishTask
 from .ui.dialog import Ui_Dialog
@@ -85,8 +89,8 @@ class AppDialog(QtGui.QWidget):
         # tooltips for the task and link inputs
         self.ui.context_widget.set_task_tooltip(
             "<p>The task that the selected item will be associated with "
-            "in Shotgun after publishing. It is recommended to always "
-            "fill out the Task field when publishing. The menu button "
+            "in Flow Production Tracking after publishing. It is recommended "
+            "to always fill out the Task field when publishing. The menu button "
             "to the right will provide suggestions for Tasks to publish "
             "including the Tasks assigned to you, recently used Tasks, "
             "and Tasks related to the entity Link populated in the field "
@@ -94,9 +98,9 @@ class AppDialog(QtGui.QWidget):
         )
         self.ui.context_widget.set_link_tooltip(
             "<p>The entity that the selected item will be associated with "
-            "in Shotgun after publishing. By selecting a Task in the field "
-            "above, the Link will automatically be populated. It is "
-            "recommended that you always populate the Task field when "
+            "in Flow Production Tracking after publishing. By selecting a "
+            "Task in the field above, the Link will automatically be populated. "
+            "It is recommended that you always populate the Task field when "
             "publishing. The Task menu above will display any tasks associated "
             "with the entity populated in this field.</p>"
         )
@@ -151,7 +155,7 @@ class AppDialog(QtGui.QWidget):
         self.ui.items_tree.checked.connect(self._update_details_from_selection)
 
         # thumbnails
-        self.ui.item_thumbnail.screen_grabbed.connect(self._update_item_thumbnail)
+        self.ui.item_thumbnail.thumbnail_changed.connect(self._update_item_thumbnail)
 
         # tool buttons
         self.ui.delete_items.clicked.connect(self._delete_selected)
@@ -242,9 +246,37 @@ class AppDialog(QtGui.QWidget):
             self._progress_handler.show_details
         )
 
-        # hide settings for now
-        self.ui.item_settings_label.hide()
-        self.ui.item_settings.hide()
+        # If Background Publishing App available for the running engine, show
+        # the settings widget and add a UI option for turning background
+        # publishing on/off
+        bg_publish_app = self._bundle.engine.apps.get("tk-multi-bg-publish", None)
+        if bg_publish_app:
+            # Create the checkbox for enabling background processing
+            self.bg_publish_checkbox = QtGui.QCheckBox(
+                "Perform publish in the background"
+            )
+            self.bg_publish_checkbox.setToolTip(
+                "When checked, you may continue working in the DCC while the publish is performed in a background process. Open the Background Publish Monitor to see your publish progress."
+            )
+            default_bg_process = self._bundle.get_setting("collector_settings", {}).get(
+                "Background Processing", False
+            )
+            self.bg_publish_checkbox.setChecked(default_bg_process)
+            self.bg_publish_checkbox.stateChanged.connect(
+                lambda state=None: self._set_bg_processing()
+            )
+            # Add the checkbox to the settings widget layout
+            settings_layout = self.ui.item_settings.layout()
+            settings_layout.addWidget(self.bg_publish_checkbox)
+            settings_layout.addStretch()
+            # Show the settings widget
+            self.ui.item_settings_label.show()
+            self.ui.item_settings.show()
+        else:
+            # No Background Publishing App available, so hide the settings widget
+            self.bg_publish_checkbox = None
+            self.ui.item_settings_label.hide()
+            self.ui.item_settings.hide()
 
         # create a publish manager
         self._publish_manager = PublishManager(self._progress_handler.logger)
@@ -269,7 +301,7 @@ class AppDialog(QtGui.QWidget):
 
     @property
     def manual_load_enabled(self):
-        """ Returns whether user is allowed to load file to the UI """
+        """Returns whether user is allowed to load file to the UI"""
         return self._bundle.get_setting("enable_manual_load")
 
     def keyPressEvent(self, event):
@@ -286,7 +318,7 @@ class AppDialog(QtGui.QWidget):
             self._progress_handler.hide_details()
 
         else:
-            super(AppDialog, self).keyPressEvent(event)
+            super().keyPressEvent(event)
 
     def closeEvent(self, event):
         """
@@ -306,7 +338,9 @@ class AppDialog(QtGui.QWidget):
             # shut down main threadpool
             self._task_manager.shut_down()
         except Exception:
-            logger.exception("Error running Shotgun Panel App closeEvent()")
+            logger.exception(
+                "Error running Flow Production Tracking Panel App closeEvent()"
+            )
 
         # ensure the context widget's recent contexts are saved
         self.ui.context_widget.save_recent_contexts()
@@ -853,6 +887,9 @@ class AppDialog(QtGui.QWidget):
         # reset the validation flag
         self._validation_run = False
 
+        # set Background Processing flag for the publish tree
+        self._set_bg_processing()
+
     def _on_drop(self, files):
         """
         When someone drops stuff into the publish.
@@ -868,7 +905,7 @@ class AppDialog(QtGui.QWidget):
         self._progress_handler.push("Processing external files...")
 
         # pyside gives us back unicode. Make sure we convert it to strings
-        str_files = [six.ensure_str(f) for f in files]
+        str_files = [sgutils.ensure_str(f) for f in files]
 
         try:
             self.ui.main_stack.setCurrentIndex(self.PUBLISH_SCREEN)
@@ -1009,6 +1046,25 @@ class AppDialog(QtGui.QWidget):
         self.ui.item_inherited_item_label.setText(
             base_lbl.format("Description not inherited")
         )
+
+    def _set_bg_processing(self):
+        """
+        Set the background processing flag on the publish tree.
+
+        The flag will be set on the publish tree root item for all children to
+        inherit. This flag indicates if the publish should be performed in the
+        background or not.
+
+        This is only applicable if the current running engine supports the
+        Background Publishing App.
+        """
+
+        if not self.bg_publish_checkbox:
+            return
+
+        # Set the bg processing flag on the root item for children to inherit.
+        bg_processing = self.bg_publish_checkbox.isChecked()
+        self._publish_manager.tree.root_item.properties["bg_processing"] = bg_processing
 
     def _delete_selected(self):
         """
@@ -1167,6 +1223,7 @@ class AppDialog(QtGui.QWidget):
 
         # hide the action buttons during publish
         self.ui.button_container.hide()
+        self.ui.item_settings.setEnabled(False)
 
         # Make sure that settings from the current selection are retrieved from the UI and applied
         # back on the tasks.
@@ -1185,6 +1242,7 @@ class AppDialog(QtGui.QWidget):
                         "Validation errors detected. " "Not proceeding with publish."
                     )
                     self.ui.button_container.show()
+                    self.ui.item_settings.setEnabled(True)
                     return
 
             # validation not required on publish, it has already run though
@@ -1207,6 +1265,7 @@ class AppDialog(QtGui.QWidget):
                 if button_clicked == QtGui.QMessageBox.Cancel:
                     # user does not want ot continue.
                     self.ui.button_container.show()
+                    self.ui.item_settings.setEnabled(True)
                     return
 
                 self._progress_handler.logger.info("User skipped validation step.")
@@ -1214,6 +1273,7 @@ class AppDialog(QtGui.QWidget):
             if self._stop_processing_flagged:
                 # stop processing
                 self.ui.button_container.show()
+                self.ui.item_settings.setEnabled(True)
                 return
 
             # inform the progress system of the current mode
@@ -1265,6 +1325,7 @@ class AppDialog(QtGui.QWidget):
             if self._stop_processing_flagged:
                 self._progress_handler.logger.info("Processing aborted by user.")
                 self.ui.button_container.show()
+                self.ui.item_settings.setEnabled(True)
                 return
 
         finally:
@@ -1318,6 +1379,7 @@ class AppDialog(QtGui.QWidget):
         self.ui.close.hide()
 
         self.ui.button_container.show()
+        self.ui.item_settings.setEnabled(True)
 
         # hide summary overlay
         self._overlay.hide()
@@ -1404,7 +1466,11 @@ class AppDialog(QtGui.QWidget):
                     continue
 
             self._progress_handler.push(
-                "%s: %s" % (stage_name, ui_item,),
+                "%s: %s"
+                % (
+                    stage_name,
+                    ui_item,
+                ),
                 ui_item.icon,
                 ui_item.get_publish_instance(),
             )
@@ -1777,6 +1843,3 @@ class _TaskSelection(object):
         :returns: ``True`` is the selection is not empty, ``False`` otherwise.
         """
         return bool(self._items)
-
-    # To maintain Python 2 compatibility, define __nonzero__ as well as __bool__
-    __nonzero__ = __bool__

@@ -37,6 +37,11 @@ def _is_qt_pixmap_usable():
     if _qt_pixmap_is_usable is not None:
         return _qt_pixmap_is_usable
 
+    # Check first that current engine has UI
+    if not sgtk.platform.current_engine().has_ui:
+        _qt_pixmap_is_usable = False
+        return _qt_pixmap_is_usable
+
     try:
         # We can fail importing if the engine doesn't even support Qt.
         from sgtk.platform.qt import QtGui
@@ -141,7 +146,7 @@ class PublishItem(object):
         )
 
         # local
-        for (k, prop_dict) in item_dict["local_properties"].items():
+        for k, prop_dict in item_dict["local_properties"].items():
             new_item._local_properties[k] = PublishData.from_dict(prop_dict)
 
         new_item._parent = parent
@@ -225,7 +230,7 @@ class PublishItem(object):
         """
 
         converted_local_properties = {}
-        for (k, prop) in self._local_properties.items():
+        for k, prop in self._local_properties.items():
             converted_local_properties[k] = prop.to_dict()
 
         context_value = None
@@ -387,16 +392,16 @@ class PublishItem(object):
         :returns: Path to a file on disk or None if no thumbnail set
         """
 
-        # nothing to do if running without a UI
-        if not sgtk.platform.current_engine().has_ui:
-            return None
-
         # the thumbnail path was explicitly provided
         if self._thumbnail_path:
             return self._thumbnail_path
 
         if self._current_temp_file_path:
             return self._current_temp_file_path
+
+        # nothing to do if running without a UI
+        if not sgtk.platform.current_engine().has_ui:
+            return None
 
         if self.thumbnail is None:
             return None
@@ -913,7 +918,7 @@ class PublishItem(object):
 
     @thumbnail.setter
     def thumbnail(self, pixmap):
-        """Sets the thumbnail """
+        """Sets the thumbnail"""
         # If we're changing the thumbnail, the cached path is no longer valid.
         if self._thumbnail_pixmap != pixmap:
             self._current_temp_file_path = None
@@ -960,10 +965,10 @@ class PublishItem(object):
         The type specification for this item. This specification typically
         follows a hierarchical dot notation. For example, 'file', 'file.image',
         or 'file.movie'. This allows for a system whereby some publish plugins
-        act on 'file.*' items (publish to SG for example) while other plugins
+        act on 'file.*' items (publish to PTR for example) while other plugins
         may perform actions on a more specific set of items (for example
         uploading the media represented by 'file.image' or 'file.movie' items to
-        SG as Versions). This is how the default integrations use this property
+        PTR as Versions). This is how the default integrations use this property
         on collected items.
         """
         return self._type_spec

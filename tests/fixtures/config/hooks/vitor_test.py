@@ -30,7 +30,7 @@ class VitorPlugin(HookBaseClass):
         return CustomNameWidget(
             parent,
             qtwidgets,
-            description_widget=super(VitorPlugin, self).create_settings_widget(parent),
+            description_widget=super().create_settings_widget(parent),
         )
 
     def get_ui_settings(self, widget):

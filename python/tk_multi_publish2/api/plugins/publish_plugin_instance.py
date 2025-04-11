@@ -8,18 +8,12 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
-from contextlib import contextmanager
 import traceback
-
-try:
-    # In Python 3 the interface changed, getargspec is now deprecated.
-    # getfullargspec was deprecated in 3.5, but that was reversed in 3.6.
-    from inspect import getfullargspec as getargspec
-except ImportError:
-    # Fallback for Python 2
-    from inspect import getargspec
+from contextlib import contextmanager
+from inspect import getfullargspec
 
 import sgtk
+
 from .instance_base import PluginInstanceBase
 
 logger = sgtk.platform.get_logger(__name__)
@@ -44,7 +38,7 @@ class PublishPluginInstance(PluginInstanceBase):
 
         self._icon_pixmap = None
 
-        super(PublishPluginInstance, self).__init__(path, settings, publish_logger)
+        super().__init__(path, settings, publish_logger)
 
     def _create_hook_instance(self, path):
         """
@@ -183,7 +177,8 @@ class PublishPluginInstance(PluginInstanceBase):
         if item.context.project is None:
             status = False
             self.logger.error(
-                "Please link '%s' to a Shotgun object and task!" % item.name
+                "Please link '%s' to a Flow Production Tracking object and task!"
+                % item.name
             )
 
         if status:
@@ -233,7 +228,10 @@ class PublishPluginInstance(PluginInstanceBase):
 
         with self._handle_plugin_error(None, "Error laying out widgets: %s"):
 
-            if len(getargspec(self._hook_instance.create_settings_widget).args) == 3:
+            if (
+                len(getfullargspec(self._hook_instance.create_settings_widget).args)
+                == 3
+            ):
                 return self._hook_instance.create_settings_widget(parent, items)
             else:
                 # Items is a newer attribute, which an older version of the hook
@@ -256,7 +254,7 @@ class PublishPluginInstance(PluginInstanceBase):
 
         with self._handle_plugin_error(None, "Error reading settings from UI: %s"):
 
-            if len(getargspec(self._hook_instance.get_ui_settings).args) == 3:
+            if len(getfullargspec(self._hook_instance.get_ui_settings).args) == 3:
                 return self._hook_instance.get_ui_settings(parent, items)
             else:
                 # Items is a newer attribute, which an older version of the hook
@@ -282,7 +280,7 @@ class PublishPluginInstance(PluginInstanceBase):
 
         with self._handle_plugin_error(None, "Error writing settings to UI: %s"):
 
-            if len(getargspec(self._hook_instance.set_ui_settings).args) == 4:
+            if len(getfullargspec(self._hook_instance.set_ui_settings).args) == 4:
                 self._hook_instance.set_ui_settings(parent, settings, items)
             else:
                 # Items is a newer attribute, which an older version of the hook

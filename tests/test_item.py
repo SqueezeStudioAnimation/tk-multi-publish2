@@ -14,7 +14,7 @@ import tempfile
 from publish_api_test_base import PublishApiTestBase
 from tank_test.tank_test_base import temp_env_var
 from tank_test.tank_test_base import setUpModule  # noqa
-from mock import patch, MagicMock
+from unittest.mock import patch, MagicMock
 
 import sgtk
 
@@ -398,7 +398,7 @@ class TestPublishItem(PublishApiTestBase):
 
 class TestQtPixmapAvailability(PublishApiTestBase):
     def setUp(self):
-        super(TestQtPixmapAvailability, self).setUp()
+        super().setUp()
 
         # Make sure we're about to reset a flag that actually exists!
         self.assertTrue(hasattr(self.api.item, "_qt_pixmap_is_usable"))
@@ -416,16 +416,17 @@ class TestQtPixmapAvailability(PublishApiTestBase):
         self._reset_pixmap_flag()
         self.assertTrue(self.api.item._is_qt_pixmap_usable())
 
-    def test_missing_qtgui(self):
+    def test_missing_engine_ui(self):
         """
-        Ensures a missing QApplication will not support QtPixmap usage.
+        Ensures an engine without UI will not support QtPixmap usage.
         """
-        QtGui = sgtk.platform.qt.QtGui
-        del sgtk.platform.qt.QtGui
-        self.assertFalse(self.api.item._is_qt_pixmap_usable())
-        self._reset_pixmap_flag()
+        with patch.object(
+            sgtk.platform.qt.QtGui.QApplication, "instance", return_value=None
+        ):
+            self.assertFalse(sgtk.platform.current_engine().has_ui)
+            self.assertFalse(self.api.item._is_qt_pixmap_usable())
 
-        sgtk.platform.qt.QtGui = QtGui
+        self._reset_pixmap_flag()
         self.assertTrue(self.api.item._is_qt_pixmap_usable())
 
     def test_pixmap_methods(self):

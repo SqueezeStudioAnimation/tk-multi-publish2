@@ -11,7 +11,6 @@
 import mimetypes
 import os
 import sgtk
-from tank_vendor import six
 
 HookBaseClass = sgtk.get_hook_baseclass()
 
@@ -286,7 +285,7 @@ class BasicSceneCollector(HookBaseClass):
 
         file_items = []
 
-        for (image_seq_path, img_seq_files) in img_sequences:
+        for image_seq_path, img_seq_files in img_sequences:
 
             # get info for the extension
             item_info = self._get_item_info(image_seq_path)
@@ -399,7 +398,7 @@ class BasicSceneCollector(HookBaseClass):
                 # the system's default encoding. If a unicode string is
                 # returned, we simply ensure it's utf-8 encoded to avoid issues
                 # with toolkit, which expects utf-8
-                category_type = six.ensure_str(category_type)
+                category_type = str(category_type)
 
                 # the category portion of the mimetype
                 category = category_type.split("/")[0]
@@ -414,7 +413,9 @@ class BasicSceneCollector(HookBaseClass):
 
         # everything should be populated. return the dictionary
         return dict(
-            item_type=item_type, type_display=type_display, icon_path=icon_path,
+            item_type=item_type,
+            type_display=type_display,
+            icon_path=icon_path,
         )
 
     def _get_icon_path(self, icon_name, icons_folders=None):
@@ -472,7 +473,7 @@ class BasicSceneCollector(HookBaseClass):
             # get all the image mime type image extensions as well
             mimetypes.init()
             types_map = mimetypes.types_map
-            for (ext, mimetype) in types_map.items():
+            for ext, mimetype in types_map.items():
                 if mimetype.startswith("image/"):
                     image_extensions.add(ext.lstrip("."))
 
