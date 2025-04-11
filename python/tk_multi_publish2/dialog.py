@@ -1461,7 +1461,9 @@ class AppDialog(QtGui.QWidget):
                 # jump out of the iteration
                 break
 
+            # Squeeze change
             if 'Publishing' not in stage_name:
+                # End Squeeze change
                 if not ui_item.checked:
                     continue
 
@@ -1524,8 +1526,10 @@ class AppDialog(QtGui.QWidget):
             try:
                 # yield each child item to be acted on by the publish api
                 if isinstance(ui_item, TreeNodeTask):
+                    # Squeeze change
                     ui_item.task.active = ui_item.checked
                     if ui_item.checked:
+                        # End Squeeze change
                         yield ui_item.task
 
                 # all other nodes are UI-only and can handle their own
